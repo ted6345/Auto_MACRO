@@ -27,7 +27,10 @@ report = f"📅 **매크로 브리핑 ({datetime.now().strftime('%Y-%m-%d')})**\
 
 for name, symbol in tickers.items():
     cur, day_before, w, m, y = get_market_data(symbol)
-    if symbol == "^TNX": cur, day_before, w, m, y = cur/10, day_before/10, w/10, m/10, y/10
+    if symbol == "^TNX": 
+        def adjust_rate(value):
+            return value/10 if value > 20 else value
+        cur, day_before, w, m, y = adjust_rate(cur), adjust_rate(day_before), adjust_rate(w), adjust_rate(m), adjust_rate(y)
     report += f"📊 **{name}**\n- 현재: {cur:.2f}\n- 전날: {day_before:.2f} | 1주전: {w:.2f} | 1달전: {m:.2f}\n\n"
 
 send_telegram_msg(report)
