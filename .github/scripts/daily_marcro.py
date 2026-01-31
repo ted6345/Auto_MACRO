@@ -72,6 +72,7 @@ try:
     insight = get_claude_insight(summary_for_claude)
 except Exception as e:
     insight = "인사이트를 불러오는 중 오류가 발생했습니다."
+    print(e)
 
 final_report = f"📅 **매크로 브리핑 ({datetime.now().strftime('%Y-%m-%d')})**\n\n"
 final_report += report_data
