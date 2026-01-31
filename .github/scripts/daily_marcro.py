@@ -31,7 +31,7 @@ def get_claude_insight(report_text):
     prompt = f"다음은 오늘 주요 매크로 지표 데이터야:\n{report_text}\n\n이 지표들을 바탕으로 오늘 주식 투자자가 주의해야 할 점이나 시장 성격을 딱 한 문장(한 줄 평)으로 요약해줘."
     
     message = client.messages.create(
-        model="claude-3-5-sonnet-20240620",
+        model="claude-haiku-4-5",
         max_tokens=300,
         messages=[{"role": "user", "content": prompt}]
     )
