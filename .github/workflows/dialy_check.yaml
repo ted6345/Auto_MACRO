@@ -1,0 +1,25 @@
+name: Daily Macro Report
+
+on:
+  schedule:
+    # UTC 기준입니다. 한국 시간(KST) 오전 8:00은 UTC 11:00 PM (전날)입니다.
+    - cron: '0 23 * * *' 
+  workflow_dispatch: # 수동으로도 실행 가능하게 함
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Run script
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python daily_marcro.py
