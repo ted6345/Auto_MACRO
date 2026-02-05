@@ -309,14 +309,14 @@ yield_3y, yield_3y_diff, yield_10y, yield_10y_diff, yield_3y_src, yield_10y_src 
 if yield_3y is not None:
     if yield_3y_diff is not None:
         report_data += (
-            f"  - 📊 **한국 3년물 국채 금리**: {yield_3y:.2f}% "
+            f"- 📊 **한국 3년물 국채 금리**: {yield_3y:.2f}% "
             f"({format_change(yield_3y, yield_3y - yield_3y_diff)})\n"
         )
     else:
-        report_data += f"  - 📊 **한국 3년물 국채 금리**: {yield_3y:.2f}%\n"
+        report_data += f"- 📊 **한국 3년물 국채 금리**: {yield_3y:.2f}%\n"
     summary_for_claude += f"한국 3년물 국채 금리: {yield_3y:.2f}%\n"
 else:
-    report_data += "  - 📊 **한국 3년물 국채 금리**: 데이터 없음\n"
+    report_data += "- 📊 **한국 3년물 국채 금리**: 데이터 없음\n"
 
 # 3년물/10년물 사이 가독성용 개행
 report_data += "\n"
@@ -325,16 +325,16 @@ if yield_10y is not None:
     yield_10y_note = " (FRED·월간)" if yield_10y_src == "FRED" else ""
     if yield_10y_diff is not None:
         report_data += (
-            f"  - 📊 **한국 10년물 국채 금리**{yield_10y_note}: {yield_10y:.2f}% "
+            f"- 📊 **한국 10년물 국채 금리**{yield_10y_note}: {yield_10y:.2f}% "
             f"({format_change(yield_10y, yield_10y - yield_10y_diff)})\n"
         )
     else:
         report_data += (
-            f"  - 📊 **한국 10년물 국채 금리**{yield_10y_note}: {yield_10y:.2f}%\n"
+            f"- 📊 **한국 10년물 국채 금리**{yield_10y_note}: {yield_10y:.2f}%\n"
         )
     summary_for_claude += f"한국 10년물 국채 금리{yield_10y_note}: {yield_10y:.2f}%\n"
 else:
-    report_data += "  - 📊 **한국 10년물 국채 금리**: 데이터 없음\n"
+    report_data += "- 📊 **한국 10년물 국채 금리**: 데이터 없음\n"
 
 report_data += "\n"
 
@@ -354,7 +354,7 @@ for name, symbol in korea_tickers.items():
         change_pct_str = f"{change_pct_icon} {change_pct:+.2f}%"
 
         report_data += (
-            f"  - 📊 **{name}**: {cur:.2f}{unit} ({change_str}, {change_pct_str})\n"
+            f"- 📊 **{name}**: {cur:.2f}{unit} ({change_str}, {change_pct_str})\n"
         )
         report_data += f"      - 1주전: {w:.2f} | 1달전: {m:.2f}\n\n"
         summary_for_claude += f"{name}: 현재 {cur:.2f}, 전날대비 {change_pct_str}\n"
