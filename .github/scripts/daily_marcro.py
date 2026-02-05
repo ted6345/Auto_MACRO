@@ -282,6 +282,7 @@ global_tickers = {
     "금 가격": "GC=F",
     "비트코인": "BTC-USD",
     "S&P500": "^GSPC",
+    "NASDAQ 100": "^NDX",
     "VIX": "^VIX",
 }
 
@@ -382,13 +383,18 @@ for name, symbol in global_tickers.items():
             unit = ""
         elif symbol == "USDKRW=X":  # 원/달러 환율
             unit = " 원"
-        elif symbol in ["^GSPC", "DX-Y.NYB"]:  # S&P500, 달러 인덱스
-            unit = " 포인트" if symbol == "^GSPC" else ""
+        elif symbol in ["^GSPC", "^NDX", "DX-Y.NYB"]:  # S&P500, NASDAQ 100, 달러 인덱스
+            unit = " 포인트" if symbol in ["^GSPC", "^NDX"] else ""
 
         change_str = format_change(cur, yest)
-        report_data += f"- 📊 **{name}**: {cur:.2f}{unit} ({change_str})\n"
+        # 변동률(%)도 같이 표시
+        change_pct = ((cur - yest) / yest * 100) if yest != 0 else 0
+        change_pct_icon = "🔴" if change_pct > 0 else "🔵" if change_pct < 0 else "⚪"
+        change_pct_str = f"{change_pct_icon} {change_pct:+.2f}%"
+
+        report_data += f"- 📊 **{name}**: {cur:.2f}{unit} ({change_str}, {change_pct_str})\n"
         report_data += f"    - 1주전: {w:.2f} | 1달전: {m:.2f}\n\n"
-        summary_for_claude += f"{name}: 현재 {cur:.2f}, 전날대비 {change_str}\n"
+        summary_for_claude += f"{name}: 현재 {cur:.2f}, 전날대비 {change_pct_str}\n"
     except Exception as e:
         print(f"{name} 데이터 가져오기 실패: {e}")
         report_data += f"📊 **{name}**: 데이터 없음\n\n"
