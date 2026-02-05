@@ -299,7 +299,7 @@ if fear_greed_current is not None:
     summary_for_claude += f"공포/탐욕 지수: {fear_greed_current} ({fg_status})\n"
 
 # 한국 시장 지표 섹션
-report_data += "🇰🇷 **한국 시장**\n\n"
+report_data += "🇰🇷 **한국 시장**\n"
 
 # 한국 국채 금리 먼저 추가
 yield_3y, yield_3y_diff, yield_10y, yield_10y_diff, yield_3y_src, yield_10y_src = (
