@@ -1,14 +1,19 @@
-import yfinance as yf
-import requests
 import os
 import re
 from datetime import datetime
+
+import requests
+import yfinance as yf
 from anthropic import Anthropic
+
 
 # 1. 환경 변수 설정
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+# 기본 채널을 하드코딩해 두되, 워크플로우/로컬에서 언제든 덮어쓸 수 있게 합니다.
+SLACK_CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID")
 
 # 공통 HTTP 헤더(간단한 봇 차단 회피용)
 _UA = (
@@ -231,10 +236,7 @@ def get_korea_bond_yield():
 
         def _get_naver_interest_rate_and_diff(marketindex_cd: str):
             # 예: IRR_GOVT03Y, IRR_GOVT10Y
-            url = (
-                "https://finance.naver.com/marketindex/interestDetail.naver"
-                f"?marketindexCd={marketindex_cd}"
-            )
+            url = f"https://finance.naver.com/marketindex/interestDetail.naver?marketindexCd={marketindex_cd}"
             headers = {
                 "User-Agent": _UA,
                 "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -321,9 +323,7 @@ def get_korea_bond_yield():
         try:
             if yield_3y is None:
                 yield_3y = _sanitize_yield(
-                    _get_investing(
-                        "https://kr.investing.com/rates-bonds/south-korea-3-year-bond-yield"
-                    )
+                    _get_investing("https://kr.investing.com/rates-bonds/south-korea-3-year-bond-yield")
                 )
                 if yield_3y is not None:
                     source_3y = "INVESTING"
@@ -334,9 +334,7 @@ def get_korea_bond_yield():
         try:
             if yield_10y is None:
                 yield_10y = _sanitize_yield(
-                    _get_investing(
-                        "https://kr.investing.com/rates-bonds/south-korea-10-year-bond-yield"
-                    )
+                    _get_investing("https://kr.investing.com/rates-bonds/south-korea-10-year-bond-yield")
                 )
                 if yield_10y is not None:
                     source_10y = "INVESTING"
@@ -388,6 +386,50 @@ def send_telegram_msg(message):
         print(f"텔레그램 전송 실패: {e}")
 
 
+def _to_slack_mrkdwn(text: str) -> str:
+    """
+    Slack mrkdwn은 굵게가 *bold* 포맷이라 텔레그램용 **bold**를 변환합니다.
+    (완전한 마크다운 변환기는 아니고, 현재 보고서 포맷에 필요한 최소 변환만 수행)
+    """
+    if not text:
+        return text
+    try:
+        return re.sub(r"\*\*(.+?)\*\*", r"*\1*", text)
+    except Exception:
+        return text
+
+
+def send_slack_msg(message: str):
+    # 로컬 실행/테스트 혹은 미설정 환경에서는 안전하게 스킵
+    if not SLACK_BOT_TOKEN or not SLACK_CHANNEL_ID:
+        print("SLACK_BOT_TOKEN/SLACK_CHANNEL_ID 미설정: Slack 전송을 건너뜁니다.")
+        return
+
+    url = "https://slack.com/api/chat.postMessage"
+    headers = {
+        "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
+        "Content-Type": "application/json; charset=utf-8",
+    }
+    payload = {
+        "channel": SLACK_CHANNEL_ID,
+        "text": _to_slack_mrkdwn(message),
+        "mrkdwn": True,
+        "unfurl_links": False,
+        "unfurl_media": False,
+    }
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        if resp.status_code != 200:
+            print(f"Slack 전송 실패: HTTP {resp.status_code} {resp.text[:200]}")
+            return
+        data = resp.json() if resp.text else {}
+        if not data.get("ok", False):
+            err = data.get("error") or "unknown_error"
+            print(f"Slack 전송 실패: {err}")
+    except Exception as e:
+        print(f"Slack 전송 실패: {e}")
+
+
 # 메인 로직
 # 글로벌 지표
 global_tickers = {
@@ -414,10 +456,9 @@ def _fmt_pct_change(cur, prev):
     icon = "🔴" if pct > 0 else "🔵" if pct < 0 else "⚪"
     return f"{icon} {pct:+.2f}%"
 
+
 # 공포/탐욕 지수 먼저 추가
-stock_fg_cur, stock_fg_prev, stock_fg_emoji, stock_fg_status, _ = (
-    get_stock_fear_greed_index()
-)
+stock_fg_cur, stock_fg_prev, stock_fg_emoji, stock_fg_status, _ = get_stock_fear_greed_index()
 if stock_fg_cur is not None:
     base_prev = stock_fg_prev if stock_fg_prev is not None else stock_fg_cur
     fg_change_str = format_change(stock_fg_cur, base_prev)
@@ -425,22 +466,16 @@ if stock_fg_cur is not None:
         f"📊 **공포/탐욕 지수 (주식·CNN)**: {stock_fg_emoji} {stock_fg_cur:.1f} "
         f"({stock_fg_status}) ({fg_change_str})\n"
     )
-    summary_lines.append(
-        f"주식 공포/탐욕 지수(CNN): {stock_fg_cur:.1f} ({stock_fg_status})\n"
-    )
+    summary_lines.append(f"주식 공포/탐욕 지수(CNN): {stock_fg_cur:.1f} ({stock_fg_status})\n")
 
-crypto_fg_cur, crypto_fg_prev, crypto_fg_emoji, crypto_fg_status, _ = (
-    get_crypto_fear_greed_index()
-)
+crypto_fg_cur, crypto_fg_prev, crypto_fg_emoji, crypto_fg_status, _ = get_crypto_fear_greed_index()
 if crypto_fg_cur is not None:
     fg_change_str = format_change(crypto_fg_cur, crypto_fg_prev)
     report_lines.append(
         f"📊 **공포/탐욕 지수 (크립토·Alternative.me)**: {crypto_fg_emoji} {crypto_fg_cur} "
         f"({crypto_fg_status}) ({fg_change_str})\n"
     )
-    summary_lines.append(
-        f"크립토 공포/탐욕 지수(Alternative.me): {crypto_fg_cur} ({crypto_fg_status})\n"
-    )
+    summary_lines.append(f"크립토 공포/탐욕 지수(Alternative.me): {crypto_fg_cur} ({crypto_fg_status})\n")
 
 if stock_fg_cur is not None or crypto_fg_cur is not None:
     report_lines.append("\n")
@@ -449,14 +484,11 @@ if stock_fg_cur is not None or crypto_fg_cur is not None:
 report_lines.append("🇰🇷 **한국 시장**\n")
 
 # 한국 국채 금리 먼저 추가
-yield_3y, yield_3y_diff, yield_10y, yield_10y_diff, yield_3y_src, yield_10y_src = (
-    get_korea_bond_yield()
-)
+yield_3y, yield_3y_diff, yield_10y, yield_10y_diff, yield_3y_src, yield_10y_src = get_korea_bond_yield()
 if yield_3y is not None:
     if yield_3y_diff is not None:
         report_lines.append(
-            f"- 📊 **한국 3년물 국채 금리**: {yield_3y:.2f}% "
-            f"({format_change(yield_3y, yield_3y - yield_3y_diff)})\n"
+            f"- 📊 **한국 3년물 국채 금리**: {yield_3y:.2f}% ({format_change(yield_3y, yield_3y - yield_3y_diff)})\n"
         )
     else:
         report_lines.append(f"- 📊 **한국 3년물 국채 금리**: {yield_3y:.2f}%\n")
@@ -475,12 +507,8 @@ if yield_10y is not None:
             f"({format_change(yield_10y, yield_10y - yield_10y_diff)})\n"
         )
     else:
-        report_lines.append(
-            f"- 📊 **한국 10년물 국채 금리**{yield_10y_note}: {yield_10y:.2f}%\n"
-        )
-    summary_lines.append(
-        f"한국 10년물 국채 금리{yield_10y_note}: {yield_10y:.2f}%\n"
-    )
+        report_lines.append(f"- 📊 **한국 10년물 국채 금리**{yield_10y_note}: {yield_10y:.2f}%\n")
+    summary_lines.append(f"한국 10년물 국채 금리{yield_10y_note}: {yield_10y:.2f}%\n")
 else:
     report_lines.append("- 📊 **한국 10년물 국채 금리**: 데이터 없음\n")
 
@@ -492,19 +520,11 @@ if vkospi_cur is not None:
     if vkospi_prev is not None:
         vkospi_change = format_change(vkospi_cur, vkospi_prev)
         pct_part = f", {vkospi_pct}" if vkospi_pct else ""
-        report_lines.append(
-            f"- 📊 **VKOSPI(국장 공포지수)**: {vkospi_cur:.2f} "
-            f"({vkospi_change}{pct_part})\n"
-        )
+        report_lines.append(f"- 📊 **VKOSPI(국장 공포지수)**: {vkospi_cur:.2f} ({vkospi_change}{pct_part})\n")
     else:
         pct_part = f" ({vkospi_pct})" if vkospi_pct else ""
-        report_lines.append(
-            f"- 📊 **VKOSPI(국장 공포지수)**: {vkospi_cur:.2f}{pct_part}\n"
-        )
-    summary_lines.append(
-        f"VKOSPI(국장 공포지수): {vkospi_cur:.2f}"
-        f"{(' (' + vkospi_pct + ')') if vkospi_pct else ''}\n"
-    )
+        report_lines.append(f"- 📊 **VKOSPI(국장 공포지수)**: {vkospi_cur:.2f}{pct_part}\n")
+    summary_lines.append(f"VKOSPI(국장 공포지수): {vkospi_cur:.2f}{(' (' + vkospi_pct + ')') if vkospi_pct else ''}\n")
 else:
     report_lines.append("- 📊 **VKOSPI(국장 공포지수)**: 데이터 없음\n")
 
@@ -522,9 +542,7 @@ for name, symbol in korea_tickers.items():
         change_str = format_change(cur, yest)
         change_pct_str = _fmt_pct_change(cur, yest)
 
-        report_lines.append(
-            f"- 📊 **{name}**: {cur:.2f}{unit} ({change_str}, {change_pct_str})\n"
-        )
+        report_lines.append(f"- 📊 **{name}**: {cur:.2f}{unit} ({change_str}, {change_pct_str})\n")
         report_lines.append(f"      - 1주전: {w:.2f} | 1달전: {m:.2f}\n\n")
         summary_lines.append(f"{name}: 현재 {cur:.2f}, 전날대비 {change_pct_str}\n")
     except Exception as e:
@@ -540,9 +558,7 @@ for name, symbol in global_tickers.items():
         # 금리 보정 및 단위 설정
         unit = ""
         if symbol == "^TNX":
-            cur, yest, w, m = (
-                val / 10 if val > 10 else val for val in [cur, yest, w, m]
-            )
+            cur, yest, w, m = (val / 10 if val > 10 else val for val in [cur, yest, w, m])
             unit = "%"
         elif symbol in ["GC=F", "CL=F"]:  # 금, 유가
             unit = " USD/oz" if symbol == "GC=F" else " USD/배럴"
@@ -558,9 +574,7 @@ for name, symbol in global_tickers.items():
         change_str = format_change(cur, yest)
         change_pct_str = _fmt_pct_change(cur, yest)
 
-        report_lines.append(
-            f"- 📊 **{name}**: {cur:.2f}{unit} ({change_str}, {change_pct_str})\n"
-        )
+        report_lines.append(f"- 📊 **{name}**: {cur:.2f}{unit} ({change_str}, {change_pct_str})\n")
         report_lines.append(f"    - 1주전: {w:.2f} | 1달전: {m:.2f}\n\n")
         summary_lines.append(f"{name}: 현재 {cur:.2f}, 전날대비 {change_pct_str}\n")
     except Exception as e:
@@ -594,3 +608,4 @@ print(final_report)
 
 # 실행
 send_telegram_msg(final_report)
+send_slack_msg(final_report)
